@@ -46,6 +46,22 @@ direito (F esconde/mostra).
 | Resolução interna | até 150% | até 100% | 75% |
 | Sombras | 2048 px, com árvores | 1024 px, sem árvores | não |
 | Cenário | 100% | 70%, árvores distantes simplificadas | 45%, sem nuvens |
+| Materiais | PBR (carro com verniz) | PBR (carro com verniz) | pista em Lambert, carro sem verniz nem letreiro |
+| Filtro anisotrópico | 8x | 4x | 2x |
+| Fumaça | 100% | 80% | 50% (quantidade e tamanho) |
+
+Otimizações que valem em todos os modos ("não pintar o que não aparece"):
+
+- **Carro em ~21 draw calls** (eram ~90): as peças que se movem juntas viram uma
+  malha só, com um material único que lê cor, rugosidade, metal e verniz por
+  vértice (`src/scene/carBatch.js`). A suspensão virou `InstancedMesh`.
+- **Céu desenhado por último**, no fundo do buffer de profundidade: o shader de
+  nuvens só roda nos pixels de céu visíveis. Antes ele rodava na tela inteira e
+  depois era coberto pelo chão.
+- **Cenário em blocos de 250 m**: árvores, arbustos, pedras, público e bandeiras
+  são descartados (também no passe de sombra) quando estão fora da câmera.
+- **Plano distante em 2600 m**: a neblina já cobre tudo a partir de 2500 m.
+- Peças pequenas do carro não projetam sombra, e o minimapa redesenha a 30 Hz.
 
 Em todos os modos a **resolução dinâmica** baixa a resolução interna (até 75%,
 60% ou 50%) quando o jogo fica abaixo de 50 FPS e volta a subir quando passa de

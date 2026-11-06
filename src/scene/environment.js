@@ -190,7 +190,9 @@ varying vec3 vDir;
 void main() {
   vDir = position;
   vec4 p = projectionMatrix * viewMatrix * vec4(cameraPosition + position * 10.0, 1.0);
-  gl_Position = vec4(p.xy, p.w * 0.99999, p.w);
+  // no plano de fundo (z = w): com o teste de profundidade, so os pixels que
+  // nada cobriu rodam o shader do ceu
+  gl_Position = vec4(p.xy, p.w, p.w);
 }`;
 
 const SKY_FRAGMENT = /* glsl */ `
@@ -283,7 +285,8 @@ function makeSkyMaterial(envMode, cloudCover) {
     fragmentShader: SKY_FRAGMENT,
     side: THREE.BackSide,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
+    depthFunc: THREE.LessEqualDepth,
     fog: false,
     toneMapped: false,
   });
@@ -754,7 +757,26 @@ function rockGeometry(rng) {
   return b.build();
 }
 
-function makeInstanced(geometry, material, items, name, { castShadow = false, receiveShadow = false } = {}) {
+// Divide as instancias em blocos de CHUNK m: cada bloco tem a propria esfera
+// envolvente e o three.js deixa de desenhar (e de sombrear) os que estao fora
+// da camera. Um unico InstancedMesh cobria o mapa todo e nunca era descartado.
+const CHUNK = 250;
+function makeInstanced(geometry, material, items, name, opts = {}) {
+  const cells = new Map();
+  for (const it of items) {
+    const key = `${Math.floor(it.x / CHUNK)},${Math.floor(it.z / CHUNK)}`;
+    let list = cells.get(key);
+    if (!list) cells.set(key, (list = []));
+    list.push(it);
+  }
+  const g = new THREE.Group();
+  g.name = name;
+  g.matrixAutoUpdate = false;
+  for (const [key, list] of cells) g.add(makeInstancedChunk(geometry, material, list, `${name}@${key}`, opts));
+  return g;
+}
+
+function makeInstancedChunk(geometry, material, items, name, { castShadow = false, receiveShadow = false } = {}) {
   const mesh = new THREE.InstancedMesh(geometry, material, Math.max(1, items.length));
   mesh.name = name;
   mesh.count = items.length;
@@ -1098,7 +1120,7 @@ export function createEnvironment(scene, renderer, track, options = {}) {
   const sky = new THREE.Mesh(skyGeo, skyMat);
   sky.name = 'env-sky';
   sky.frustumCulled = false;
-  sky.renderOrder = -1000;
+  sky.renderOrder = 1000; // depois dos opacos (antes era o primeiro e pintava a tela toda)
   sky.matrixAutoUpdate = false;
   group.add(sky);
 

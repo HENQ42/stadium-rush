@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { StadiumCar, PHYSICS_DT } from './physics/stadiumCar.js';
-import { createCarModel } from './scene/carModel.js';
+import { createCarModel, setCarLite } from './scene/carModel.js';
 import { EngineAudio } from './audio/engineAudio.js';
 import { Race, formatTime } from './game/race.js';
 import { Input } from './game/input.js';
@@ -20,6 +20,7 @@ const RESPAWN_GHOST = 2.0; // s sem colisao depois do respawn (salas com colisao
 // ---------- qualidade grafica ----------
 let qualityPref = loadQualityPref(); // 'auto' | 'alta' | 'media' | 'baixa'
 let quality = resolveQuality(qualityPref);
+setCarLite(quality.liteMaterials);
 
 // ---------- renderizador ----------
 // antialias so pode ser escolhido ao criar o contexto: mudar exige recarregar
@@ -27,7 +28,8 @@ const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias, powerPreference: 'high-performance' });
 renderer.setPixelRatio(targetPixelRatio(quality));
 renderer.setSize(window.innerWidth, window.innerHeight);
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000);
+// a neblina cobre tudo a partir de 2500 m: alem disso nao ha o que desenhar
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2600);
 const dynRes = new DynamicResolution(renderer);
 dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
 
@@ -481,11 +483,14 @@ menu.on('quality', (pref) => {
     return;
   }
   quality = next;
+  setCarLite(quality.liteMaterials);
   dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
   if (mode === 'menu') {
     loadWorld(menu.soloTrack, true);
-    // materiais do carro foram compilados com o estado de sombra anterior
-    carModel.group.traverse((o) => o.isMesh && [].concat(o.material).forEach((m) => (m.needsUpdate = true)));
+    // carro novo: material simples ou completo, compilado com o estado de sombra atual
+    const c = ownColor;
+    ownColor = -1;
+    setOwnColor(c);
     updateBestText();
   }
 });

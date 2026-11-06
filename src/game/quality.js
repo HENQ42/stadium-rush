@@ -7,16 +7,19 @@ export const QUALITY_PRESETS = {
     id: 'alta', name: 'Alta',
     antialias: true, maxPixelRatio: 1.5, minPixelRatio: 0.75,
     shadows: true, shadowMapSize: 2048, treeShadows: true, density: 1.0, cloudCover: 0.45, lowPoly: false,
+    anisotropy: 8, liteMaterials: false, smoke: 1,
   },
   media: {
     id: 'media', name: 'Media',
     antialias: false, maxPixelRatio: 1.0, minPixelRatio: 0.6,
     shadows: true, shadowMapSize: 1024, treeShadows: false, density: 0.7, cloudCover: 0.45, lowPoly: true,
+    anisotropy: 4, liteMaterials: false, smoke: 0.8,
   },
   baixa: {
     id: 'baixa', name: 'Baixa',
     antialias: false, maxPixelRatio: 0.75, minPixelRatio: 0.5,
     shadows: false, shadowMapSize: 512, treeShadows: false, density: 0.45, cloudCover: 0, lowPoly: true,
+    anisotropy: 2, liteMaterials: true, smoke: 0.5,
   },
 };
 

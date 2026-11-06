@@ -166,8 +166,11 @@ function rnd() {
 const rs = (a) => (rnd() * 2 - 1) * a; // simetrico [-a, a]
 
 export class TyreEffects {
-  constructor(scene) {
+  // smoke: escala da fumaca (quantidade e tamanho maximo na tela). Fumaca e
+  // transparente e grande: em GPU fraca pinta o mesmo pixel varias vezes.
+  constructor(scene, { smoke = 1 } = {}) {
     this.scene = scene;
+    this.smokeScale = Math.max(0.1, Math.min(1, smoke));
     this._v2 = new THREE.Vector2();
     this._initSkids();
     this._initSmoke();
@@ -429,7 +432,7 @@ export class TyreEffects {
     this.smoke.onBeforeRender = (renderer, _scene, camera) => {
       renderer.getDrawingBufferSize(v2);
       u.uPixelScale.value = camera.projectionMatrix.elements[5] * v2.y * 0.5;
-      u.uMaxPointSize.value = Math.max(64, v2.y * 0.3);
+      u.uMaxPointSize.value = Math.max(48, v2.y * 0.3 * this.smokeScale);
     };
   }
 
@@ -466,7 +469,7 @@ export class TyreEffects {
         if (slide) rate += (grass ? 30 : 18) + speed * 1.1;
         else if (grass && speed > 10) rate += speed * 0.7; // poeira mesmo sem derrapar
         if (rate > 0) {
-          this.smokeAcc[i] += rate * dt;
+          this.smokeAcc[i] += rate * this.smokeScale * dt;
           let k = 0;
           const cp = w.contactPoint;
           while (this.smokeAcc[i] >= 1 && k < 8) {

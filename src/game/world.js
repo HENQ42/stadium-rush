@@ -18,6 +18,21 @@ function disposeTree(root) {
   });
 }
 
+export function limitAnisotropy(root, max) {
+  root.traverse((o) => {
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      for (const k of ['map', 'emissiveMap']) {
+        const t = m[k];
+        if (t && t.anisotropy > max) {
+          t.anisotropy = max;
+          t.needsUpdate = true;
+        }
+      }
+    }
+  });
+}
+
 // quality: preset de src/game/quality.js (sombras, densidade do cenario, nuvens)
 export function createWorld(renderer, trackId, quality = null) {
   const def = getTrackDef(trackId);
@@ -36,9 +51,11 @@ export function createWorld(renderer, trackId, quality = null) {
       }
     : {};
   const env = createEnvironment(scene, renderer, track, envOptions);
-  const trackMesh = createTrackMesh(track);
+  const trackMesh = createTrackMesh(track, { lite: !!quality?.liteMaterials });
   scene.add(trackMesh.group);
-  const effects = new TyreEffects(scene);
+  const effects = new TyreEffects(scene, { smoke: quality ? quality.smoke : 1 });
+  // filtro anisotropico: 8x custa banda de memoria em GPU integrada
+  if (quality) limitAnisotropy(scene, quality.anisotropy);
 
   return {
     id: def.id,

@@ -9,6 +9,13 @@
 // modulo funcionar tambem em node (testes headless).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeSurfaceMaterial, batchParts, instanceRods, mergeSiblings } from './carBatch.js';
+
+// Graficos baixos: material sem verniz e sem o letreiro dos pneus.
+let defaultLite = false;
+export function setCarLite(v) {
+  defaultLite = !!v;
+}
 
 const WHEEL_RADIUS = 0.38;
 const FRONT_TYRE_WIDTH = 0.32;
@@ -448,7 +455,7 @@ function tyreLetteringTexture() {
 // Modelo
 // ---------------------------------------------------------------------------
 export function createCarModel(options = {}) {
-  const { bodyColor = 0x1e6bff, accentColor = 0xffffff, secondaryColor = 0xff2a2a, number = '1' } = options;
+  const { bodyColor = 0x1e6bff, accentColor = 0xffffff, secondaryColor = 0xff2a2a, number = '1', lite = defaultLite } = options;
 
   const group = new THREE.Group();
   group.name = 'car';
@@ -486,7 +493,7 @@ export function createCarModel(options = {}) {
       color: 0xb4bac2, metalness: 0.7, roughness: 0.45, transparent: true, opacity: 0, depthWrite: false,
     }),
   };
-  const lettersTex = tyreLetteringTexture();
+  const lettersTex = lite ? null : tyreLetteringTexture();
   if (lettersTex) {
     mats.letters = new THREE.MeshStandardMaterial({ map: lettersTex, roughness: 0.8, alphaTest: 0.35 });
   }
@@ -771,6 +778,31 @@ export function createCarModel(options = {}) {
     }
   });
 
+  // ======================= DRAW CALLS =======================
+  // pecas que andam juntas viram uma malha so com o material unico
+  const surface = makeSurfaceMaterial(lite);
+  const solid = new Set([
+    mats.paint, mats.accent, mats.secondary, mats.carbon, mats.inlet, mats.tyre, mats.rim, mats.disc, mats.driver, mats.visor,
+  ]);
+  const removed = [];
+  const keep = (r) => r && removed.push(...r.removed);
+  keep(batchParts(body, solid, surface, { name: 'bodyBatch', skip: [flame] }));
+  if (mats.decal) keep(mergeSiblings(body, mats.decal, 'numberDecals'));
+  for (const wh of wheels) {
+    const spinM = wh.spin.children[0];
+    const fixed = wh.pivot.children.find((c) => c !== wh.spin);
+    keep(batchParts(spinM, solid, surface, { name: 'wheelBatch' }));
+    keep(batchParts(fixed, solid, surface, { name: 'caliperBatch', castShadow: false }));
+  }
+  keep(instanceRods(group, beams, mats.carbon, surface));
+  // geometrias que nao sao mais usadas por nenhuma malha
+  {
+    const used = new Set();
+    group.traverse((o) => o.geometry && used.add(o.geometry));
+    for (const o of removed) if (o.geometry && !used.has(o.geometry)) o.geometry.dispose();
+  }
+  const rodMeshes = [...new Set(beams.map((b) => b.inst))];
+
   // ======================= ATUALIZACAO =======================
   const _o = new THREE.Vector3();
   const _b = new THREE.Vector3();
@@ -809,7 +841,10 @@ export function createCarModel(options = {}) {
       if (wh.def.steer) _o.applyAxisAngle(UP, wh.pivot.rotation.y);
       _b.addVectors(wh.root.position, _o);
       placeRod(bm.mesh, bm.a, _b);
+      bm.mesh.updateMatrix();
+      bm.inst.setMatrixAt(bm.index, bm.mesh.matrix);
     }
+    for (const r of rodMeshes) r.instanceMatrix.needsUpdate = true;
 
     // luz de freio (suavizada)
     const k = 1 - Math.exp(-dt * 25);
@@ -848,6 +883,7 @@ export function createCarModel(options = {}) {
     const materials = new Set();
     group.traverse((o) => {
       if (!o.isMesh) return;
+      if (o.isInstancedMesh) o.dispose();
       geos.add(o.geometry);
       (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materials.add(m));
     });
@@ -861,7 +897,7 @@ export function createCarModel(options = {}) {
 
   // pecas pequenas nao projetam sombra: na camera de perseguicao nao aparecem
   // e cada uma custaria um draw call a mais no passe de sombra
-  const NO_SHADOW = new Set(['suspension', 'hubNut', 'brakeDisc', 'caliper', 'rim']);
+  const NO_SHADOW = new Set(['suspension', 'hubNut', 'brakeDisc', 'caliper', 'rim', 'caliperBatch', 'suspensionRods']);
   const _sphere = new THREE.Sphere();
   group.traverse((o) => {
     if (!o.isMesh || !o.castShadow) return;

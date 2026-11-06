@@ -249,7 +249,14 @@ function buildGeometry(pos, uv, idx, color) {
   return g;
 }
 
-export function createTrackMesh(track) {
+// lite (graficos baixos): MeshLambertMaterial no lugar do PBR. Sem reflexo do
+// ceu e sem especular fisico, cada pixel da pista custa bem menos.
+export function createTrackMesh(track, { lite = false } = {}) {
+  const stdMat = (o) => {
+    if (!lite) return new THREE.MeshStandardMaterial(o);
+    const { roughness, metalness, ...rest } = o;
+    return new THREE.MeshLambertMaterial(rest);
+  };
   const group = new THREE.Group();
   group.name = 'track';
   const n = track.count;
@@ -292,13 +299,13 @@ export function createTrackMesh(track) {
     group.add(mesh);
   }
   const roadMatOpts = { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 };
-  roadMesh((i) => !inGap(i) && !isDirt(i) && !isGrass(i), new THREE.MeshStandardMaterial({
+  roadMesh((i) => !inGap(i) && !isDirt(i) && !isGrass(i), stdMat({
     map: asphaltTexture(), roughness: 0.82, metalness: 0.02, ...roadMatOpts,
   }));
-  roadMesh((i) => !inGap(i) && isDirt(i), new THREE.MeshStandardMaterial({
+  roadMesh((i) => !inGap(i) && isDirt(i), stdMat({
     map: dirtTexture(), roughness: 1.0, metalness: 0, ...roadMatOpts,
   }));
-  roadMesh((i) => !inGap(i) && isGrass(i), new THREE.MeshStandardMaterial({
+  roadMesh((i) => !inGap(i) && isGrass(i), stdMat({
     map: turfTexture(), roughness: 0.95, metalness: 0, ...roadMatOpts,
   }));
 
@@ -323,7 +330,7 @@ export function createTrackMesh(track) {
       vi += 4;
     }
     const geo = buildGeometry(pos, null, idx, col);
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = stdMat({
       vertexColors: true, roughness: 0.6, side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
     });
@@ -373,13 +380,13 @@ export function createTrackMesh(track) {
     // a textura e mapeada com y = altura: inverter v para o texto ficar de pe
     const tex = wallTexture();
     const geo = buildGeometry(pos, uv, idx);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide });
+    const mat = stdMat({ map: tex, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
     const topGeo = buildGeometry(topPos, null, topIdx);
-    const top = new THREE.Mesh(topGeo, new THREE.MeshStandardMaterial({ color: 0xe8ebf0, roughness: 0.5, side: THREE.DoubleSide }));
+    const top = new THREE.Mesh(topGeo, stdMat({ color: 0xe8ebf0, roughness: 0.5, side: THREE.DoubleSide }));
     top.receiveShadow = true;
     group.add(top);
   }
@@ -410,21 +417,21 @@ export function createTrackMesh(track) {
     }
     const geo = buildGeometry(pos, uv, idx);
     const tex = grassTexture();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, color: 0xb8c8a8, roughness: 0.95, side: THREE.DoubleSide }));
+    const mesh = new THREE.Mesh(geo, stdMat({ map: tex, color: 0xb8c8a8, roughness: 0.95, side: THREE.DoubleSide }));
     mesh.receiveShadow = true;
     group.add(mesh);
   }
 
   // ---------------- saltos: faces do vao e arcos ----------------
-  const jumpFaceMat = new THREE.MeshStandardMaterial({ color: 0x3a3f4a, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide });
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffd60a, emissive: 0xff8c00, emissiveIntensity: 0.6, roughness: 0.4 });
+  const jumpFaceMat = stdMat({ color: 0x3a3f4a, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide });
+  const stripeMat = stdMat({ color: 0xffd60a, emissive: 0xff8c00, emissiveIntensity: 0.6, roughness: 0.4 });
   const archTex = archTexture();
   archTex.repeat.set(6, 1);
-  const archMat = new THREE.MeshStandardMaterial({
+  const archMat = stdMat({
     map: archTex, emissive: 0xffffff, emissiveMap: archTex, emissiveIntensity: 0.45, roughness: 0.35, metalness: 0.2,
   });
-  const archInnerMat = new THREE.MeshStandardMaterial({ color: 0x0a0f1a, emissive: 0x34c6ff, emissiveIntensity: 1.6 });
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x2b2f38, roughness: 0.4, metalness: 0.6 });
+  const archInnerMat = stdMat({ color: 0x0a0f1a, emissive: 0x34c6ff, emissiveIntensity: 1.6 });
+  const legMat = stdMat({ color: 0x2b2f38, roughness: 0.4, metalness: 0.6 });
   for (const j of track.jumps) {
     // face vertical na borda do lip e no inicio da aterrissagem
     for (const [sEdge, sign] of [[j.lipS, 1], [j.gapEnd, -1]]) {
@@ -474,8 +481,8 @@ export function createTrackMesh(track) {
   }
 
   // ---------------- porticos ----------------
-  const gateMat = new THREE.MeshStandardMaterial({ color: 0x2b2f38, roughness: 0.4, metalness: 0.6 });
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.35, metalness: 0.2 });
+  const gateMat = stdMat({ color: 0x2b2f38, roughness: 0.4, metalness: 0.6 });
+  const whiteMat = stdMat({ color: 0xeef1f5, roughness: 0.35, metalness: 0.2 });
 
   function makeGate(s, { text, colors, height = 7.5, glow }) {
     const f = track.frameAt(s);
@@ -498,7 +505,7 @@ export function createTrackMesh(track) {
     beam.castShadow = true;
     g.add(beam);
     const tex = bannerTexture(text, colors.bg, colors.fg, colors.accent);
-    const bannerMat = new THREE.MeshStandardMaterial({
+    const bannerMat = stdMat({
       map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: glow ?? 0.35, roughness: 0.4,
     });
     for (const sz of [1, -1]) {
@@ -530,7 +537,7 @@ export function createTrackMesh(track) {
     }
     const mesh = new THREE.Mesh(
       buildGeometry(pos, uv, idx),
-      new THREE.MeshStandardMaterial({
+      stdMat({
         map: checkerTexture(), roughness: 0.6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6,
       }),
     );
@@ -576,7 +583,7 @@ export function createTrackMesh(track) {
       const a = k * 2;
       idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = stdMat({
       map: boosterTex, emissive: 0xffffff, emissiveMap: boosterTex, emissiveIntensity: 1.2, roughness: 0.5, side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6,
     });
