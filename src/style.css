@@ -197,6 +197,15 @@ input { user-select: text; -webkit-user-select: text; }
 .note { margin-top: 12px; font-size: 13px; opacity: 0.75; line-height: 1.4; }
 .join-row { display: flex; gap: 10px; justify-content: center; }
 #join-code { font-size: 22px; letter-spacing: 6px; text-transform: uppercase; width: 220px; text-align: center; }
+.room-code-field { margin-bottom: 12px; align-items: center; text-align: center; }
+#opt-code { font-size: 24px; letter-spacing: 8px; text-transform: uppercase; width: 200px; text-align: center; }
+.room-code-field small { font-weight: 400; opacity: 0.65; letter-spacing: 0; }
+.fps {
+  position: fixed; top: 3px; right: 8px; z-index: 50; pointer-events: none;
+  font: 700 11px/1 ui-monospace, Consolas, monospace; color: rgba(255,255,255,0.8);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+}
+.fps.hidden { display: none; }
 .room-list-title { margin-top: 16px; font-size: 12px; letter-spacing: 2px; opacity: 0.7; font-weight: 700; }
 .room-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
 .room-item {

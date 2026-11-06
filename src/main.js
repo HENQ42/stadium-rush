@@ -12,16 +12,24 @@ import { RemoteCars, collideCar } from './game/remoteCars.js';
 import { Menu, statusText } from './ui/menu.js';
 import { listRooms } from './net/transport.js';
 import { RoomSession, PLAYER_COLORS, F_BRAKE, F_TURBO, F_GHOST, F_SLIDE, F_GROUND, F_REVERSE } from './net/session.js';
+import { loadQualityPref, storeQualityPref, resolveQuality, targetPixelRatio, DynamicResolution } from './game/quality.js';
 
 const STATE_RATE = 30; // pacotes de posicao por segundo
 const RESPAWN_GHOST = 2.0; // s sem colisao depois do respawn (salas com colisao)
 
+// ---------- qualidade grafica ----------
+let qualityPref = loadQualityPref(); // 'auto' | 'alta' | 'media' | 'baixa'
+let quality = resolveQuality(qualityPref);
+
 // ---------- renderizador ----------
+// antialias so pode ser escolhido ao criar o contexto: mudar exige recarregar
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias, powerPreference: 'high-performance' });
+renderer.setPixelRatio(targetPixelRatio(quality));
 renderer.setSize(window.innerWidth, window.innerHeight);
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 5000);
+const dynRes = new DynamicResolution(renderer);
+dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
 
 const menu = new Menu();
 const audio = new EngineAudio();
@@ -53,13 +61,13 @@ function setOwnColor(idx) {
   world.scene.add(carModel.group);
 }
 
-function loadWorld(trackId) {
-  if (world && world.id === trackId) return;
+function loadWorld(trackId, force = false) {
+  if (!force && world && world.id === trackId && world.qualityId === quality.id) return;
   if (world) {
     world.scene.remove(carModel.group);
     world.dispose();
   }
-  world = createWorld(renderer, trackId);
+  world = createWorld(renderer, trackId, quality);
   track = world.track;
   car = new StadiumCar(track);
   chase = new ChaseCamera(camera, track);
@@ -198,13 +206,13 @@ function leaveSession() {
   s.leave();
 }
 
-async function createRoom(settings) {
+async function createRoom({ settings, code }) {
   if (!menu.requireNick()) return;
   audio.start();
   const token = ++joinToken;
-  menu.busy('Criando sala...');
+  menu.busy(code ? `Criando sala ${code}...` : 'Criando sala...');
   try {
-    const s = await RoomSession.host({ name: menu.nick, settings });
+    const s = await RoomSession.host({ name: menu.nick, settings, code });
     if (token !== joinToken) return s.leave();
     attachSession(s);
   } catch (err) {
@@ -244,7 +252,6 @@ function attachSession(s) {
   remote.setGhost(!s.settings.collisions);
   remote.clear();
   setOwnColor(s.self?.color ?? 0);
-  history.replaceState(null, '', `${location.pathname}?sala=${s.code}`);
 
   s.on('roster', () => session === s && onRoster());
   s.on('start', (r) => session === s && onRaceStart(r));
@@ -464,6 +471,24 @@ menu.on('soloTrack', () => {
   }
 });
 menu.on('create', createRoom);
+menu.on('quality', (pref) => {
+  qualityPref = pref;
+  storeQualityPref(pref);
+  const next = resolveQuality(pref);
+  if (next.antialias !== quality.antialias) {
+    // o antialias e fixo no contexto WebGL: recarrega (nick e pista ficam salvos)
+    location.reload();
+    return;
+  }
+  quality = next;
+  dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
+  if (mode === 'menu') {
+    loadWorld(menu.soloTrack, true);
+    // materiais do carro foram compilados com o estado de sombra anterior
+    carModel.group.traverse((o) => o.isMesh && [].concat(o.material).forEach((m) => (m.needsUpdate = true)));
+    updateBestText();
+  }
+});
 menu.on('join', joinRoom);
 menu.on('cancel', () => {
   joinToken++;
@@ -527,6 +552,39 @@ input.onAction('mute', () => {
   hud.toast(userMuted ? 'Som desligado' : 'Som ligado');
 });
 input.onAction('help', () => mode !== 'menu' && hud.showHelp());
+
+// contador de fps pequeno no canto (tecla F esconde/mostra; fica salvo)
+const FPS_KEY = 'stadium-rush.showFps';
+const fpsEl = document.createElement('div');
+fpsEl.id = 'fps';
+fpsEl.className = 'fps';
+let showFps = true;
+try {
+  showFps = localStorage.getItem(FPS_KEY) !== '0';
+} catch {
+  /* sem armazenamento */
+}
+fpsEl.classList.toggle('hidden', !showFps);
+document.body.appendChild(fpsEl);
+let fpsAcc = 0;
+let fpsFrames = 0;
+input.onAction('fps', () => {
+  showFps = !showFps;
+  fpsEl.classList.toggle('hidden', !showFps);
+  try {
+    localStorage.setItem(FPS_KEY, showFps ? '1' : '0');
+  } catch {
+    /* sem armazenamento */
+  }
+});
+function updateFps(dt) {
+  fpsAcc += dt;
+  fpsFrames++;
+  if (fpsAcc < 0.5) return;
+  if (showFps) fpsEl.textContent = `${Math.round(fpsFrames / fpsAcc)} FPS`;
+  fpsAcc = 0;
+  fpsFrames = 0;
+}
 input.onAction('menu', () => {
   if (mode === 'menu' || menu.visible) return;
   menu.showPause(!menu.pauseVisible, { mp: mode === 'mp', host: !!session?.isHost, racing: session?.phase === 'racing' });
@@ -586,6 +644,8 @@ function frame(now) {
   requestAnimationFrame(frame);
   let dt = (now - last) / 1000;
   last = now;
+  dynRes.update(dt);
+  updateFps(dt);
   // o timestamp do rAF pode ser anterior ao ultimo quadro; aba em segundo plano gera saltos grandes
   dt = Math.min(0.1, Math.max(0, dt));
   time += dt;
@@ -786,6 +846,11 @@ window.__game = {
   get session() { return session; },
   get remote() { return remote; },
   get mode() { return mode; },
+  get renderer() { return renderer; },
+  get world() { return world; },
+  get camera() { return camera; },
+  get quality() { return quality; },
+  get dynRes() { return dynRes; },
   menu,
 };
 

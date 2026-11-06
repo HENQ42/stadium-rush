@@ -33,12 +33,33 @@ A pasta `dist/` também funciona em hospedagem estática. Sem o servidor local, 
 multiplayer usa o servidor público de sinalização do PeerJS (precisa de
 internet), e não há lista de salas nem relay.
 
+## Gráficos e desempenho
+
+Na tela inicial, **Gráficos** tem Automática, Alta, Média e Baixa. A automática
+escolhe pelo nome da GPU (Intel/AMD integrada = Média, Intel HD antiga ou
+renderização por software = Baixa). O número de FPS fica no canto superior
+direito (F esconde/mostra).
+
+| | Alta | Média | Baixa |
+|---|---|---|---|
+| Antialias (MSAA) | sim | não | não |
+| Resolução interna | até 150% | até 100% | 75% |
+| Sombras | 2048 px, com árvores | 1024 px, sem árvores | não |
+| Cenário | 100% | 70%, árvores distantes simplificadas | 45%, sem nuvens |
+
+Em todos os modos a **resolução dinâmica** baixa a resolução interna (até 75%,
+60% ou 50%) quando o jogo fica abaixo de 50 FPS e volta a subir quando passa de
+58 FPS. Mudar entre Alta e as outras recarrega a página, porque o antialias é
+fixo no contexto WebGL.
+
 ## Multiplayer
 
 - Todo jogador escolhe um **nickname** (nomes repetidos ganham um número).
 - O **master** cria a sala e define antes: número de **voltas** (1–10),
   **colisão** entre carros (sim/não), **combustível** por checkpoint e a pista.
-  A sala recebe um código de 5 letras e um link de convite (`?sala=CODIGO`).
+  O master escolhe um **código de 4 letras** (ex.: `RUSH`) ou deixa em branco
+  para sortear um, e passa o código para quem vai entrar em "Entrar em sala".
+  Se o código já estiver em uso, o jogo pede outro.
   Com o servidor local, as salas abertas aparecem na tela "Entrar em sala".
 - Os jogadores entram no lobby. O master clica em **Iniciar corrida** quando
   quiser, e todos largam juntos (contagem sincronizada pelo relógio do master).

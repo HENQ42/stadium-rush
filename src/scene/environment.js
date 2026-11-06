@@ -725,25 +725,26 @@ function pineGeometry(rng) {
   return b.build();
 }
 
-function roundTreeGeometry(rng) {
+// detail 0 = versao simplificada (arvores distantes nos graficos medio/baixo)
+function roundTreeGeometry(rng, detail = 1) {
   const b = new Batch();
   b.add(new THREE.CylinderGeometry(0.2, 0.3, 3.2, 6, 1, true), C('#6b4a32'), mat(0, 1.6, 0), 0.05, rng);
-  b.add(jitter(new THREE.IcosahedronGeometry(2.4, 1), 0.32, 201), C('#4f8a3a'), mat(0, 4.6, 0, 0, 1, 0.88, 1), 0.1, rng);
+  b.add(jitter(new THREE.IcosahedronGeometry(2.4, detail), 0.32, 201), C('#4f8a3a'), mat(0, 4.6, 0, 0, 1, 0.88, 1), 0.1, rng);
   b.add(jitter(new THREE.IcosahedronGeometry(1.6, 0), 0.2, 202), C('#5c9a40'), mat(1.1, 5.6, 0.5), 0.1, rng);
   b.add(jitter(new THREE.IcosahedronGeometry(1.4, 0), 0.2, 203), C('#467f35'), mat(-1.0, 4.2, -0.7), 0.1, rng);
   return b.build();
 }
 
-function poplarGeometry(rng) {
+function poplarGeometry(rng, detail = 1) {
   const b = new Batch();
   b.add(new THREE.CylinderGeometry(0.16, 0.24, 2.4, 5, 1, true), C('#8a7a66'), mat(0, 1.2, 0), 0.05, rng);
-  b.add(jitter(new THREE.IcosahedronGeometry(1.5, 1), 0.18, 301), C('#6b9a3e'), mat(0, 5.4, 0, 0, 1, 2.3, 1), 0.1, rng);
+  b.add(jitter(new THREE.IcosahedronGeometry(1.5, detail), 0.18, 301), C('#6b9a3e'), mat(0, 5.4, 0, 0, 1, 2.3, 1), 0.1, rng);
   return b.build();
 }
 
-function bushGeometry(rng) {
+function bushGeometry(rng, detail = 1) {
   const b = new Batch();
-  b.add(jitter(new THREE.IcosahedronGeometry(1, 1), 0.16, 401), C('#3e6e32'), mat(0, 0.45, 0, 0, 1.3, 0.75, 1.1), 0.12, rng);
+  b.add(jitter(new THREE.IcosahedronGeometry(1, detail), 0.16, 401), C('#3e6e32'), mat(0, 0.45, 0, 0, 1.3, 0.75, 1.1), 0.12, rng);
   return b.build();
 }
 
@@ -1062,6 +1063,9 @@ export function createEnvironment(scene, renderer, track, options = {}) {
     hemiIntensity = 1.6,
     cloudCover = 0.45,
     density = 1.0,
+    shadows = true,
+    treeShadows = true,
+    lowPoly = false,
   } = options;
 
   const rng = mulberry32(seed);
@@ -1076,7 +1080,7 @@ export function createEnvironment(scene, renderer, track, options = {}) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = exposure;
     if (renderer.shadowMap) {
-      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.enabled = shadows;
       // r187: PCFSoftShadowMap foi removido (cai para PCF); PCF + radius ja e suave.
       renderer.shadowMap.type = THREE.PCFShadowMap;
     }
@@ -1122,7 +1126,7 @@ export function createEnvironment(scene, renderer, track, options = {}) {
 
   const sun = new THREE.DirectionalLight(0xffd9ae, sunIntensity);
   sun.name = 'env-sun';
-  sun.castShadow = true;
+  sun.castShadow = shadows;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   const extH = shadowExtent;
   const extV = Math.min(shadowExtent, shadowExtent * SUN_DIRECTION.y + 10); // vertical em espaco de luz (sol baixo)
@@ -1191,13 +1195,17 @@ export function createEnvironment(scene, renderer, track, options = {}) {
   // ---- vegetacao ----
   const veg = scatterVegetation(track, helpers, terrain, lake, rng, density);
   const treeGeos = { pine: pineGeometry(rng), round: roundTreeGeometry(rng), poplar: poplarGeometry(rng) };
+  const farGeos = lowPoly
+    ? { pine: treeGeos.pine, round: roundTreeGeometry(rng, 0), poplar: poplarGeometry(rng, 0) }
+    : treeGeos;
   for (const key of Object.keys(treeGeos)) {
     track_(treeGeos[key]);
+    track_(farGeos[key]);
     const { near, far } = veg.trees[key];
-    if (near.length) group.add(makeInstanced(treeGeos[key], flatMat, near, `env-trees-${key}-near`, { castShadow: true }));
-    if (far.length) group.add(makeInstanced(treeGeos[key], flatMat, far, `env-trees-${key}-far`));
+    if (near.length) group.add(makeInstanced(treeGeos[key], flatMat, near, `env-trees-${key}-near`, { castShadow: shadows && treeShadows }));
+    if (far.length) group.add(makeInstanced(farGeos[key], flatMat, far, `env-trees-${key}-far`));
   }
-  const bushGeo = track_(bushGeometry(rng));
+  const bushGeo = track_(bushGeometry(rng, lowPoly ? 0 : 1));
   const rockGeo = track_(rockGeometry(rng));
   if (veg.bushes.length) group.add(makeInstanced(bushGeo, flatMat, veg.bushes, 'env-bushes'));
   if (veg.rocks.length) group.add(makeInstanced(rockGeo, flatMat, veg.rocks, 'env-rocks', { receiveShadow: true }));

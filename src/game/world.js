@@ -18,19 +18,31 @@ function disposeTree(root) {
   });
 }
 
-export function createWorld(renderer, trackId) {
+// quality: preset de src/game/quality.js (sombras, densidade do cenario, nuvens)
+export function createWorld(renderer, trackId, quality = null) {
   const def = getTrackDef(trackId);
   const scene = new THREE.Scene();
   const track = new TrackPath(def.points, def.config);
   track.id = def.id;
   track.name = def.name;
-  const env = createEnvironment(scene, renderer, track);
+  const envOptions = quality
+    ? {
+        shadows: quality.shadows,
+        shadowMapSize: quality.shadowMapSize,
+        treeShadows: quality.treeShadows,
+        density: quality.density,
+        cloudCover: quality.cloudCover,
+        lowPoly: quality.lowPoly,
+      }
+    : {};
+  const env = createEnvironment(scene, renderer, track, envOptions);
   const trackMesh = createTrackMesh(track);
   scene.add(trackMesh.group);
   const effects = new TyreEffects(scene);
 
   return {
     id: def.id,
+    qualityId: quality ? quality.id : null,
     name: def.name,
     scene,
     track,

@@ -30,15 +30,24 @@
             <span>Pista do solo</span>
             <select id="solo-track"></select>
           </label>
+          <label class="field inline">
+            <span>Graficos</span>
+            <select id="quality"></select>
+          </label>
           <div id="best-start" class="best"></div>
           <div class="keys">
-            <span>↑ acelerar</span><span>↓ freio / re</span><span>← → virar</span><span>Enter checkpoint</span><span>C camera</span><span>Esc menu</span>
+            <span>↑ acelerar</span><span>↓ freio / re</span><span>← → virar</span><span>Enter checkpoint</span><span>C camera</span><span>F mostrar fps</span><span>Esc menu</span>
           </div>
           <div class="tip">Dica: o carro tem muita tracao e faz curvas fechadas sem escorregar. Na terra e na grama ele escorrega.</div>
         </section>
 
         <section class="screen" data-screen="create">
           <h2>Criar sala</h2>
+          <label class="field room-code-field">
+            <span>Codigo da sala (4 letras)</span>
+            <input id="opt-code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" />
+            <small>Passe esse codigo para quem vai entrar. Em branco = codigo aleatorio.</small>
+          </label>
           <div class="grid2">
             <label class="field">
               <span>Voltas</span>
@@ -81,7 +90,7 @@
         <section class="screen" data-screen="join">
           <h2>Entrar em sala</h2>
           <div class="join-row">
-            <input id="join-code" maxlength="8" autocomplete="off" spellcheck="false" placeholder="CODIGO" />
+            <input id="join-code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" />
             <button id="btn-join-go" class="primary">Entrar</button>
           </div>
           <div class="room-list-title">Salas na rede</div>

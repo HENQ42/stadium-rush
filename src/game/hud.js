@@ -217,7 +217,10 @@ export class Hud {
     if (this.toastTimer > 0 && (this.toastTimer -= dt) <= 0) this.toastEl.classList.remove('visible');
     if (this.countdownTimer > 0 && (this.countdownTimer -= dt) <= 0) this.countdownEl.classList.remove('visible');
 
-    // minimapa
+    // minimapa (30 Hz basta e poupa o canvas 2D em PCs fracos)
+    this.mapAcc = (this.mapAcc || 0) + dt;
+    if (this.mapAcc < 1 / 30) return;
+    this.mapAcc = 0;
     const c = this.mapCtx;
     c.clearRect(0, 0, this.map.width, this.map.height);
     c.drawImage(this.mapBg, 0, 0);

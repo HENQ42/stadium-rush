@@ -22,9 +22,16 @@ const now = () => performance.now();
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const num = (v, min, max, def = 0) => (isNum(v) ? Math.max(min, Math.min(max, v)) : def);
 
+export const CODE_LENGTH = 4;
+
+// Codigo da sala: so letras A-Z, maiusculas.
+export function cleanCode(v) {
+  return String(v || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, CODE_LENGTH);
+}
+
 export function makeRoomCode() {
-  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const buf = new Uint32Array(5);
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sem I e O (confundem com 1 e 0)
+  const buf = new Uint32Array(CODE_LENGTH);
   crypto.getRandomValues(buf);
   return Array.from(buf, (v) => abc[v % abc.length]).join('');
 }
@@ -94,12 +101,15 @@ function newPlayer(id, name, color) {
 
 export class RoomSession extends Emitter {
   // ---------------- criacao ----------------
-  static async host({ name, settings }) {
+  // code: codigo escolhido pelo master; vazio = aleatorio
+  static async host({ name, settings, code: wanted = '' }) {
+    wanted = cleanCode(wanted);
+    if (wanted && wanted.length !== CODE_LENGTH) throw new Error(`O codigo precisa ter ${CODE_LENGTH} letras`);
     let transport = null;
     let code = null;
     let lastErr = null;
-    for (let i = 0; i < 4 && !transport; i++) {
-      code = makeRoomCode();
+    for (let i = 0; i < (wanted ? 1 : 4) && !transport; i++) {
+      code = wanted || makeRoomCode();
       try {
         transport = await HostTransport.create(code);
       } catch (err) {
@@ -107,15 +117,18 @@ export class RoomSession extends Emitter {
         if (!/codigo/.test(err.message)) break;
       }
     }
-    if (!transport) throw lastErr || new Error('Nao foi possivel criar a sala');
+    if (!transport) {
+      if (wanted && lastErr && /codigo/.test(lastErr.message)) throw new Error(`Ja existe uma sala com o codigo ${wanted}. Escolha outro.`);
+      throw lastErr || new Error('Nao foi possivel criar a sala');
+    }
     const s = new RoomSession('host');
     s._initHost(transport, code, cleanName(name), cleanSettings(settings));
     return s;
   }
 
   static async join({ name, code, onStatus }) {
-    code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (code.length < 3) throw new Error('Codigo da sala invalido');
+    code = cleanCode(code);
+    if (code.length !== CODE_LENGTH) throw new Error(`O codigo da sala tem ${CODE_LENGTH} letras`);
     const link = await connectToRoom(code, onStatus);
     const s = new RoomSession('client');
     try {

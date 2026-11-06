@@ -34,7 +34,7 @@ export class Input {
     const map = {
       Enter: 'respawn', NumpadEnter: 'respawn', Backspace: 'respawn',
       Delete: 'restart', KeyR: 'restart',
-      KeyC: 'camera', KeyM: 'mute', KeyH: 'help', Escape: 'menu',
+      KeyC: 'camera', KeyM: 'mute', KeyH: 'help', Escape: 'menu', KeyF: 'fps',
       ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
     };
     const a = map[code];

@@ -1,7 +1,8 @@
 // Menus em DOM: tela inicial, criar/entrar em sala, lobby, resultado e pausa.
 import { TRACKS, DEFAULT_TRACK, getTrackDef } from '../track/tracks.js';
-import { PLAYER_COLORS } from '../net/session.js';
+import { PLAYER_COLORS, CODE_LENGTH, cleanCode } from '../net/session.js';
 import { formatTime, formatDiff } from '../game/race.js';
+import { QUALITY_PRESETS, detectQuality, loadQualityPref } from '../game/quality.js';
 
 const $ = (id) => document.getElementById(id);
 const NICK_KEY = 'stadium-rush.nick';
@@ -80,6 +81,14 @@ export class Menu {
       store(SOLO_TRACK_KEY, $('solo-track').value);
       this.fire('soloTrack', $('solo-track').value);
     });
+    $('opt-code').value = cleanCode(saved.code);
+
+    // qualidade grafica
+    const q = $('quality');
+    q.appendChild(new Option(`Automatica (${QUALITY_PRESETS[detectQuality()].name})`, 'auto'));
+    for (const p of Object.values(QUALITY_PRESETS)) q.appendChild(new Option(p.name, p.id));
+    q.value = loadQualityPref();
+    q.addEventListener('change', () => this.fire('quality', q.value));
 
     const nick = $('nick');
     nick.value = load(NICK_KEY) || '';
@@ -91,15 +100,23 @@ export class Menu {
     $('btn-join').onclick = () => this.requireNick() && this.show('join');
     $('btn-create-go').onclick = () => {
       const s = this.createSettings();
-      store(ROOM_OPTS_KEY, JSON.stringify(s));
-      this.fire('create', s);
+      const code = this.roomCode;
+      if (code && code.length !== CODE_LENGTH) {
+        this.setError(`O codigo precisa ter ${CODE_LENGTH} letras (ou deixe em branco)`);
+        return;
+      }
+      store(ROOM_OPTS_KEY, JSON.stringify({ ...s, code }));
+      this.fire('create', { settings: s, code });
     };
     $('btn-join-go').onclick = () => this.fire('join', $('join-code').value);
     $('join-code').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.fire('join', $('join-code').value);
     });
     $('join-code').addEventListener('input', (e) => {
-      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      e.target.value = cleanCode(e.target.value);
+    });
+    $('opt-code').addEventListener('input', (e) => {
+      e.target.value = cleanCode(e.target.value);
     });
     for (const b of this.root.querySelectorAll('[data-back]')) b.onclick = () => this.show('main');
     $('btn-busy-cancel').onclick = () => this.fire('cancel');
@@ -153,6 +170,11 @@ export class Menu {
     };
   }
 
+  // codigo escolhido pelo master ('' = aleatorio)
+  get roomCode() {
+    return cleanCode($('opt-code').value);
+  }
+
   show(screen) {
     this.current = screen;
     this.root.classList.remove('hidden');
@@ -179,7 +201,7 @@ export class Menu {
     $('busy-text').textContent = text;
   }
   setJoinCode(code) {
-    $('join-code').value = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    $('join-code').value = cleanCode(code);
   }
   setBest(text) {
     $('best-start').textContent = text || '';
@@ -211,8 +233,9 @@ export class Menu {
 
   renderLobby(session) {
     $('lobby-code').textContent = session.code;
-    const link = `${location.origin}${location.pathname}?sala=${session.code}`;
-    $('lobby-link').textContent = `Convite: ${link}`;
+    $('lobby-link').textContent = session.isHost
+      ? `Passe o codigo ${session.code} para quem vai entrar ("Entrar em sala").`
+      : '';
     const st = $('lobby-settings');
     st.replaceChildren(...settingsText(session.settings).map((t) => el('span', null, t)));
     const ul = $('lobby-players');

@@ -859,6 +859,21 @@ export function createCarModel(options = {}) {
     if (group.parent) group.parent.remove(group);
   }
 
+  // pecas pequenas nao projetam sombra: na camera de perseguicao nao aparecem
+  // e cada uma custaria um draw call a mais no passe de sombra
+  const NO_SHADOW = new Set(['suspension', 'hubNut', 'brakeDisc', 'caliper', 'rim']);
+  const _sphere = new THREE.Sphere();
+  group.traverse((o) => {
+    if (!o.isMesh || !o.castShadow) return;
+    if (NO_SHADOW.has(o.name)) {
+      o.castShadow = false;
+      return;
+    }
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+    _sphere.copy(o.geometry.boundingSphere);
+    if (_sphere.radius * Math.max(Math.abs(o.scale.x), Math.abs(o.scale.y), Math.abs(o.scale.z)) < 0.12) o.castShadow = false;
+  });
+
   update({});
 
   return { group, update, dispose, wheels };
