@@ -19,6 +19,9 @@ export class ChaseCamera {
     this._v = new THREE.Vector3();
     this._f = new THREE.Vector3();
     this._up = new THREE.Vector3();
+    // temporarios reaproveitados (sem lixo por quadro = sem pausas do GC)
+    this._t1 = new THREE.Vector3();
+    this._desired = new THREE.Vector3();
     this._g = {};
     this.initialized = false;
   }
@@ -65,7 +68,7 @@ export class ChaseCamera {
       const hs = Math.hypot(vel[0], vel[2]);
       if (hs > 8 && car.localVel[2] > 0) {
         const k = Math.min(0.35, (hs - 8) / 60);
-        flatF.multiplyScalar(1 - k).add(new THREE.Vector3(vel[0] / hs, 0, vel[2] / hs).multiplyScalar(k)).normalize();
+        flatF.multiplyScalar(1 - k).add(this._t1.set((vel[0] / hs) * k, 0, (vel[2] / hs) * k)).normalize();
       }
       if (!this.initialized) {
         this.dir.copy(flatF);
@@ -74,10 +77,8 @@ export class ChaseCamera {
         this.dir.lerp(flatF, 1 - Math.exp(-rate * dt)).normalize();
       }
       const dist = m.dist + Math.min(1.6, kmh * 0.004);
-      const desired = new THREE.Vector3()
-        .copy(carPos)
-        .addScaledVector(this.dir, -dist)
-        .add(new THREE.Vector3(0, m.height, 0));
+      const desired = this._desired.copy(carPos).addScaledVector(this.dir, -dist);
+      desired.y += m.height;
       if (!this.initialized) {
         this.pos.copy(desired);
       } else {
@@ -108,7 +109,8 @@ export class ChaseCamera {
         cam.position.x += (Math.random() - 0.5) * this.shake;
         cam.position.y += (Math.random() - 0.5) * this.shake;
       }
-      this.target.copy(carPos).add(new THREE.Vector3(0, m.look, 0)).addScaledVector(this.dir, 2.5);
+      this.target.copy(carPos).addScaledVector(this.dir, 2.5);
+      this.target.y += m.look;
       cam.up.set(0, 1, 0);
       cam.lookAt(this.target);
     }

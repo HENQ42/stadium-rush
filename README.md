@@ -35,10 +35,20 @@ internet), e não há lista de salas nem relay.
 
 ## Gráficos e desempenho
 
-Na tela inicial, **Gráficos** tem Automática, Alta, Média e Baixa. A automática
-escolhe pelo nome da GPU (Intel/AMD integrada = Média, Intel HD antiga ou
-renderização por software = Baixa). O número de FPS fica no canto superior
-direito (F esconde/mostra).
+Na tela inicial, **Gráficos** tem Retrô (padrão), Automática, Alta, Média e
+Baixa. A automática escolhe entre Alta, Média e Baixa pelo nome da GPU (Intel/AMD
+integrada = Média, Intel HD antiga ou renderização por software = Baixa). O
+canto superior direito mostra o FPS médio e o mínimo (pior quadro) de cada meio
+segundo; a tecla F esconde/mostra.
+
+**Retrô (padrão)** é o visual de corrida estilo PS1/Saturn com o mesmo jogo por
+baixo (física, pistas, multiplayer). A cena é desenhada em **360 linhas fixas**
+(640×360 em tela 16:9) e ampliada com pixels nítidos. Um passe final faz tone
+mapping, dithering ordenado (Bayer 4×4) e reduz a cor para 15 bits (`src/game/retro.js`).
+Os materiais são Lambert com sombreado facetado, sem mapa de sombra (uma sombra
+redonda fica sob cada carro) e as texturas são ampliadas sem suavizar. O custo
+por quadro fica baixo e quase constante: o FPS fica alto e estável mesmo em GPU
+integrada.
 
 | | Alta | Média | Baixa |
 |---|---|---|---|
@@ -63,9 +73,14 @@ Otimizações que valem em todos os modos ("não pintar o que não aparece"):
 - **Plano distante em 2600 m**: a neblina já cobre tudo a partir de 2500 m.
 - Peças pequenas do carro não projetam sombra, e o minimapa redesenha a 30 Hz.
 
-Em todos os modos a **resolução dinâmica** baixa a resolução interna (até 75%,
-60% ou 50%) quando o jogo fica abaixo de 50 FPS e volta a subir quando passa de
-58 FPS. Mudar entre Alta e as outras recarrega a página, porque o antialias é
+Para o FPS não oscilar: todos os shaders e texturas da pista são preparados ao
+carregar (fumaça, faíscas e chama do turbo inclusive), então nada trava na
+primeira vez que aparece; a câmera não cria objetos por quadro (sem pausas do
+coletor de lixo); e a classificação ao vivo do multiplayer atualiza a 10 Hz.
+
+Nos modos Alta, Média e Baixa a **resolução dinâmica** baixa a resolução interna (até 75%,
+60% ou 50%) quando os piores quadros ficam abaixo de 50 FPS e volta a subir
+depois de 8 s acima de 57 FPS, em passos pequenos. Mudar entre Alta e as outras recarrega a página, porque o antialias é
 fixo no contexto WebGL.
 
 ## Multiplayer

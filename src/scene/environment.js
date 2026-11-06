@@ -206,6 +206,7 @@ uniform vec3 uSunDir;
 uniform float uTime;
 uniform float uEnvMode;
 uniform float uCloudCover;
+uniform float uLinear;
 varying vec3 vDir;
 
 float hash12(vec2 p) {
@@ -260,6 +261,10 @@ void main() {
   if (uEnvMode > 0.5) {
     // mapa de ambiente: converte para linear e deixa o sol em HDR
     col = pow(max(col, vec3(0.0)), vec3(2.2)) + pow(uSunColor, vec3(2.2)) * disc * 24.0;
+  } else if (uLinear > 0.5) {
+    // visual retro: a cena vai para um render target linear e o passe final
+    // aplica tone mapping e sRGB (mesmo caminho da neblina)
+    col = pow(max(col, vec3(0.0)), vec3(2.2));
   } else {
     col += (hash12(gl_FragCoord.xy) - 0.5) / 255.0; // dithering contra banding
   }
@@ -280,6 +285,7 @@ function makeSkyMaterial(envMode, cloudCover) {
       uTime: { value: 0 },
       uEnvMode: { value: envMode ? 1 : 0 },
       uCloudCover: { value: cloudCover },
+      uLinear: { value: 0 },
     },
     vertexShader: SKY_VERTEX,
     fragmentShader: SKY_FRAGMENT,
@@ -1088,6 +1094,7 @@ export function createEnvironment(scene, renderer, track, options = {}) {
     shadows = true,
     treeShadows = true,
     lowPoly = false,
+    linearOutput = false,
   } = options;
 
   const rng = mulberry32(seed);
@@ -1117,6 +1124,7 @@ export function createEnvironment(scene, renderer, track, options = {}) {
 
   const skyGeo = track_(new THREE.SphereGeometry(1, 32, 16));
   const skyMat = track_(makeSkyMaterial(false, cloudCover));
+  skyMat.uniforms.uLinear.value = linearOutput ? 1 : 0;
   const sky = new THREE.Mesh(skyGeo, skyMat);
   sky.name = 'env-sky';
   sky.frustumCulled = false;

@@ -128,6 +128,7 @@ class RemoteCar {
     ws.braking = !!(st.f & F_BRAKE);
     ws.speedKmh = kmh;
     ws.boost = st.f & F_TURBO ? 1 : 0;
+    ws.grounded = !!(st.f & F_GROUND);
     ws.dt = dt;
     this.model.update(ws);
     // ghost temporario (respawn) tambem fica translucido? so sinalizamos no nome

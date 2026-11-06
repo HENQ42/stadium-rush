@@ -33,6 +33,21 @@ export function limitAnisotropy(root, max) {
   });
 }
 
+// visual retro: texturas ampliadas sem suavizar (pixels nitidos)
+export function pixelTextures(root) {
+  root.traverse((o) => {
+    for (const m of [].concat(o.material || [])) {
+      for (const k of ['map', 'emissiveMap']) {
+        const t = m[k];
+        if (t && t.magFilter !== THREE.NearestFilter) {
+          t.magFilter = THREE.NearestFilter;
+          t.needsUpdate = true;
+        }
+      }
+    }
+  });
+}
+
 // quality: preset de src/game/quality.js (sombras, densidade do cenario, nuvens)
 export function createWorld(renderer, trackId, quality = null) {
   const def = getTrackDef(trackId);
@@ -48,6 +63,7 @@ export function createWorld(renderer, trackId, quality = null) {
         density: quality.density,
         cloudCover: quality.cloudCover,
         lowPoly: quality.lowPoly,
+        linearOutput: !!quality.retro,
       }
     : {};
   const env = createEnvironment(scene, renderer, track, envOptions);
@@ -56,6 +72,7 @@ export function createWorld(renderer, trackId, quality = null) {
   const effects = new TyreEffects(scene, { smoke: quality ? quality.smoke : 1 });
   // filtro anisotropico: 8x custa banda de memoria em GPU integrada
   if (quality) limitAnisotropy(scene, quality.anisotropy);
+  if (quality?.retro) pixelTextures(scene);
 
   return {
     id: def.id,

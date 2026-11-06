@@ -3,6 +3,13 @@
 const QUALITY_KEY = 'stadium-rush.quality';
 
 export const QUALITY_PRESETS = {
+  // visual retro: resolucao interna fixa e baixa, ampliada com pixels nitidos
+  retro: {
+    id: 'retro', name: 'Retro (mais rapido)', retro: true, renderHeight: 360,
+    antialias: false, maxPixelRatio: 1, minPixelRatio: 1,
+    shadows: false, shadowMapSize: 512, treeShadows: false, density: 0.85, cloudCover: 0.45, lowPoly: false,
+    anisotropy: 1, liteMaterials: true, smoke: 0.7,
+  },
   alta: {
     id: 'alta', name: 'Alta',
     antialias: true, maxPixelRatio: 1.5, minPixelRatio: 0.75,
@@ -26,9 +33,9 @@ export const QUALITY_PRESETS = {
 export function loadQualityPref() {
   try {
     const v = localStorage.getItem(QUALITY_KEY);
-    return v === 'auto' || QUALITY_PRESETS[v] ? v : 'auto';
+    return v === 'auto' || QUALITY_PRESETS[v] ? v : 'retro';
   } catch {
-    return 'auto';
+    return 'retro';
   }
 }
 
@@ -74,15 +81,19 @@ export function targetPixelRatio(preset) {
 }
 
 // Baixa a resolucao interna quando o fps cai e sobe de novo quando sobra folga.
+// Decide pelos piores quadros (percentil 90 do tempo de quadro) numa janela de
+// 2 s, com passos pequenos e espera longa para subir: assim nao fica
+// oscilando (cada troca realoca o canvas e da um pequeno engasgo).
 export class DynamicResolution {
   constructor(renderer) {
     this.renderer = renderer;
     this.min = 0.5;
     this.max = 1;
     this.pr = 1;
-    this.frames = 0;
+    this.samples = [];
     this.time = 0;
     this.cool = 0;
+    this.stable = 0;
     this.upBlock = 0;
     this.lastUp = false;
     this.fps = 0;
@@ -92,7 +103,10 @@ export class DynamicResolution {
     this.max = max;
     this.min = Math.min(min, max);
     this.pr = max;
+    this.samples.length = 0;
+    this.time = 0;
     this.cool = 2;
+    this.stable = 0;
     this.upBlock = 0;
     this.lastUp = false;
     this._apply();
@@ -105,28 +119,38 @@ export class DynamicResolution {
   // dt = tempo real entre quadros (s)
   update(dt) {
     if (!(dt > 0) || dt > 0.25 || document.hidden) return;
-    this.frames++;
+    this.samples.push(dt);
     this.time += dt;
     this.cool -= dt;
     this.upBlock -= dt;
-    if (this.time < 1) return;
-    const fps = this.frames / this.time;
+    if (this.time < 2) return;
+    const sorted = this.samples.slice().sort((a, b) => a - b);
+    const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
+    const fps = 1 / p90;
     this.fps = fps;
-    this.frames = 0;
+    const window = this.time;
+    this.samples.length = 0;
     this.time = 0;
     if (this.cool > 0) return;
     if (fps < 50 && this.pr > this.min + 1e-3) {
-      this.pr = Math.max(this.min, this.pr * 0.85);
-      this.cool = 1.5;
-      // se acabou de subir e caiu de novo, fica mais tempo sem tentar subir
-      this.upBlock = this.lastUp ? 30 : 5;
+      this.pr = Math.max(this.min, this.pr * 0.9);
+      this.cool = 2;
+      this.stable = 0;
+      // subiu e caiu de novo: fica 60 s sem tentar subir
+      this.upBlock = this.lastUp ? 60 : 8;
       this.lastUp = false;
       this._apply();
-    } else if (fps > 58 && this.pr < this.max - 1e-3 && this.upBlock <= 0) {
-      this.pr = Math.min(this.max, this.pr * 1.1);
-      this.cool = 2;
-      this.lastUp = true;
-      this._apply();
+    } else if (fps > 57) {
+      this.stable += window;
+      if (this.stable >= 8 && this.pr < this.max - 1e-3 && this.upBlock <= 0) {
+        this.pr = Math.min(this.max, this.pr * 1.05);
+        this.cool = 2;
+        this.stable = 0;
+        this.lastUp = true;
+        this._apply();
+      }
+    } else {
+      this.stable = 0;
     }
   }
 }

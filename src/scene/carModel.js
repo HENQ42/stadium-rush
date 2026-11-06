@@ -11,10 +11,31 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeSurfaceMaterial, batchParts, instanceRods, mergeSiblings } from './carBatch.js';
 
-// Graficos baixos: material sem verniz e sem o letreiro dos pneus.
-let defaultLite = false;
-export function setCarLite(v) {
-  defaultLite = !!v;
+// Estilo padrao dos carros novos (definido pela qualidade grafica):
+//   lite  = sem verniz e sem o letreiro dos pneus
+//   retro = materiais Lambert com sombreado facetado (visual low-poly)
+//   blob  = sombra redonda sob o carro (quando as sombras estao desligadas)
+const carStyle = { lite: false, retro: false, blob: false };
+export function setCarStyle(s = {}) {
+  carStyle.lite = !!s.lite;
+  carStyle.retro = !!s.retro;
+  carStyle.blob = !!s.blob;
+}
+
+// Converte um material PBR em Lambert mantendo cor, brilho e transparencia.
+function toLambert(m) {
+  if (!m || !(m.isMeshStandardMaterial || m.isMeshPhysicalMaterial)) return m;
+  const l = new THREE.MeshLambertMaterial({
+    color: m.color, map: m.map, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity,
+    transparent: m.transparent, opacity: m.opacity, side: m.side, depthWrite: m.depthWrite, alphaTest: m.alphaTest,
+    polygonOffset: m.polygonOffset, polygonOffsetFactor: m.polygonOffsetFactor, polygonOffsetUnits: m.polygonOffsetUnits,
+    flatShading: !m.map,
+  });
+  // o modelo junta pecas pela rugosidade/metal: guarda os valores de origem
+  l.roughness = m.roughness;
+  l.metalness = m.metalness;
+  m.dispose();
+  return l;
 }
 
 const WHEEL_RADIUS = 0.38;
@@ -455,7 +476,10 @@ function tyreLetteringTexture() {
 // Modelo
 // ---------------------------------------------------------------------------
 export function createCarModel(options = {}) {
-  const { bodyColor = 0x1e6bff, accentColor = 0xffffff, secondaryColor = 0xff2a2a, number = '1', lite = defaultLite } = options;
+  const {
+    bodyColor = 0x1e6bff, accentColor = 0xffffff, secondaryColor = 0xff2a2a, number = '1',
+    lite = carStyle.lite || carStyle.retro, retro = carStyle.retro, blobShadow = carStyle.blob,
+  } = options;
 
   const group = new THREE.Group();
   group.name = 'car';
@@ -504,6 +528,7 @@ export function createCarModel(options = {}) {
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
   }
+  if (retro) for (const k of Object.keys(mats)) mats[k] = toLambert(mats[k]);
 
   const add = (geo, mat, parent, { cast = true, receive = true, name } = {}) => {
     const m = new THREE.Mesh(geo, mat);
@@ -778,9 +803,46 @@ export function createCarModel(options = {}) {
     }
   });
 
+  // ======================= SOMBRA REDONDA =======================
+  // sem mapa de sombra, uma mancha escura sob o carro ainda "assenta" o carro no chao
+  let blob = null;
+  if (blobShadow) {
+    // disco: centro opaco, anel a 75% quase opaco, borda transparente (alfa por vertice)
+    const SEG = 24;
+    const pos = [0, 0, 0];
+    const col = [0, 0, 0, 1];
+    for (const [r, a] of [[0.75, 0.9], [1, 0]]) {
+      for (let k = 0; k < SEG; k++) {
+        const t = (k / SEG) * TAU;
+        pos.push(Math.cos(t) * r * 1.65, 0, Math.sin(t) * r * 3.1);
+        col.push(0, 0, 0, a);
+      }
+    }
+    const idx = [];
+    for (let k = 0; k < SEG; k++) {
+      const a = 1 + k, b = 1 + ((k + 1) % SEG);
+      idx.push(0, b, a);
+      const c = a + SEG, d = b + SEG;
+      idx.push(a, b, d, a, d, c);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    geo.setIndex(idx);
+    mats.blob = new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.65, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    });
+    blob = add(geo, mats.blob, group, { cast: false, receive: false, name: 'blobShadow' });
+    blob.position.set(0, -0.49, -0.05); // chao em -0.56 + asfalto 0.025 acima: folga para a suspensao
+    blob.renderOrder = 1;
+  }
+
   // ======================= DRAW CALLS =======================
   // pecas que andam juntas viram uma malha so com o material unico
-  const surface = makeSurfaceMaterial(lite);
+  const surface = retro
+    ? new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, name: 'carSurfaceRetro' })
+    : makeSurfaceMaterial(lite);
   const solid = new Set([
     mats.paint, mats.accent, mats.secondary, mats.carbon, mats.inlet, mats.tyre, mats.rim, mats.disc, mats.driver, mats.visor,
   ]);
@@ -845,6 +907,11 @@ export function createCarModel(options = {}) {
       bm.inst.setMatrixAt(bm.index, bm.mesh.matrix);
     }
     for (const r of rodMeshes) r.instanceMatrix.needsUpdate = true;
+
+    if (mats.blob) {
+      const target = state.grounded === false ? 0.2 : 0.65;
+      mats.blob.opacity += (target - mats.blob.opacity) * (1 - Math.exp(-dt * 10));
+    }
 
     // luz de freio (suavizada)
     const k = 1 - Math.exp(-dt * 25);

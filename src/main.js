@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import './style.css';
 import { StadiumCar, PHYSICS_DT } from './physics/stadiumCar.js';
-import { createCarModel, setCarLite } from './scene/carModel.js';
+import { createCarModel, setCarStyle } from './scene/carModel.js';
+import { RetroPipeline, precompileScene } from './game/retro.js';
 import { EngineAudio } from './audio/engineAudio.js';
 import { Race, formatTime } from './game/race.js';
 import { Input } from './game/input.js';
@@ -20,7 +21,7 @@ const RESPAWN_GHOST = 2.0; // s sem colisao depois do respawn (salas com colisao
 // ---------- qualidade grafica ----------
 let qualityPref = loadQualityPref(); // 'auto' | 'alta' | 'media' | 'baixa'
 let quality = resolveQuality(qualityPref);
-setCarLite(quality.liteMaterials);
+applyCarStyle();
 
 // ---------- renderizador ----------
 // antialias so pode ser escolhido ao criar o contexto: mudar exige recarregar
@@ -31,7 +32,34 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 // a neblina cobre tudo a partir de 2500 m: alem disso nao ha o que desenhar
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2600);
 const dynRes = new DynamicResolution(renderer);
-dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
+const retroPipe = new RetroPipeline(renderer);
+
+function applyCarStyle() {
+  setCarStyle({ lite: quality.liteMaterials, retro: !!quality.retro, blob: !quality.shadows });
+}
+
+// Retro: resolucao interna fixa (renderHeight linhas), ampliada com pixels
+// nitidos pelo CSS. Os outros modos usam a resolucao dinamica.
+function applyRenderMode() {
+  document.body.classList.toggle('retro', !!quality.retro);
+  if (quality.retro) {
+    renderer.setPixelRatio(Math.min(2, quality.renderHeight / Math.max(1, window.innerHeight)));
+    retroPipe.syncSize();
+  } else {
+    dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
+  }
+}
+applyRenderMode();
+
+function renderFrame() {
+  if (quality.retro) retroPipe.render(world.scene, camera);
+  else renderer.render(world.scene, camera);
+}
+
+// shaders e texturas prontos antes da corrida (sem engasgo no 1o turbo/fumaca)
+function precompile() {
+  if (world) precompileScene(renderer, world.scene, camera, quality.retro ? retroPipe : null);
+}
 
 const menu = new Menu();
 const audio = new EngineAudio();
@@ -61,6 +89,7 @@ function setOwnColor(idx) {
   carModel = makeCarModel(idx);
   carModel.group.visible = visible;
   world.scene.add(carModel.group);
+  precompile();
 }
 
 function loadWorld(trackId, force = false) {
@@ -78,6 +107,7 @@ function loadWorld(trackId, force = false) {
   if (hud) hud.setTrack(track);
   else hud = new Hud(document.getElementById('hud'), track);
   setupRace({});
+  precompile();
 }
 
 // ---------- estado do jogo ----------
@@ -314,8 +344,12 @@ function onRoster() {
   if (menu.resultsVisible && s.phase === 'racing') showLiveResults();
 }
 
+let boardRows = null;
+let boardAcc = 0;
+
 function onRaceStart(info) {
   const s = session;
+  boardRows = null;
   menu.resetResults();
   menu.hide();
   menu.showPause(false);
@@ -483,8 +517,8 @@ menu.on('quality', (pref) => {
     return;
   }
   quality = next;
-  setCarLite(quality.liteMaterials);
-  dynRes.setRange(Math.min(quality.minPixelRatio, targetPixelRatio(quality)), targetPixelRatio(quality));
+  applyCarStyle();
+  applyRenderMode();
   if (mode === 'menu') {
     loadWorld(menu.soloTrack, true);
     // carro novo: material simples ou completo, compilado com o estado de sombra atual
@@ -582,13 +616,17 @@ input.onAction('fps', () => {
     /* sem armazenamento */
   }
 });
+let fpsWorst = 0;
+// media e minimo (pior quadro) a cada 0,5 s: minimo bem abaixo da media = engasgo
 function updateFps(dt) {
   fpsAcc += dt;
   fpsFrames++;
+  if (dt > fpsWorst) fpsWorst = dt;
   if (fpsAcc < 0.5) return;
-  if (showFps) fpsEl.textContent = `${Math.round(fpsFrames / fpsAcc)} FPS`;
+  if (showFps) fpsEl.textContent = `${Math.round(fpsFrames / fpsAcc)} FPS · min ${Math.round(1 / Math.max(fpsWorst, 1e-3))}`;
   fpsAcc = 0;
   fpsFrames = 0;
+  fpsWorst = 0;
 }
 input.onAction('menu', () => {
   if (mode === 'menu' || menu.visible) return;
@@ -649,7 +687,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   let dt = (now - last) / 1000;
   last = now;
-  dynRes.update(dt);
+  if (!quality.retro) dynRes.update(dt);
   updateFps(dt);
   // o timestamp do rAF pode ser anterior ao ultimo quadro; aba em segundo plano gera saltos grandes
   dt = Math.min(0.1, Math.max(0, dt));
@@ -750,6 +788,7 @@ function frame(now) {
   wheelState.speedKmh = car.localVel[2] * 3.6;
   wheelState.boost = car.turboTime > 0 ? Math.min(1, car.turboTime / car.tun.turboDuration + 0.3) : 0;
   wheelState.dt = dt;
+  wheelState.grounded = car.grounded;
   carModel.update(wheelState);
 
   // carros dos outros
@@ -794,9 +833,15 @@ function frame(now) {
   if (mode === 'solo') {
     hud.update(dt, race, car);
   } else if (mode === 'mp' && session && session.phase === 'racing') {
-    const rows = liveRows();
+    // classificacao a 10 Hz (antes era montada e comparada a cada quadro)
     const laps = session.settings.laps;
-    hud.setBoard(rows.map((r) => ({ name: r.name, css: PLAYER_COLORS[r.color % PLAYER_COLORS.length].css, info: statusText(r, laps).replace('Volta ', 'V'), self: r.id === session.selfId, out: r.status === 'dnf' })));
+    boardAcc += dt;
+    if (!boardRows || boardAcc >= 0.1) {
+      boardAcc = 0;
+      boardRows = liveRows();
+      hud.setBoard(boardRows.map((r) => ({ name: r.name, css: PLAYER_COLORS[r.color % PLAYER_COLORS.length].css, info: statusText(r, laps).replace('Volta ', 'V'), self: r.id === session.selfId, out: r.status === 'dnf' })));
+    }
+    const rows = boardRows;
     const others = [];
     for (const rc of remote.cars.values()) if (rc.visible) others.push({ x: rc.pos.x, z: rc.pos.z, css: PLAYER_COLORS[rc.colorIndex % PLAYER_COLORS.length].css });
     const elapsed = Math.max(0, (hostNow - (session.race?.goAt || hostNow)) / 1000);
@@ -824,7 +869,7 @@ function frame(now) {
     if (menu.resultsVisible && !menu.pauseVisible && (time * 2) % 1 < dt * 2) showLiveResults();
   }
 
-  renderer.render(world.scene, camera);
+  renderFrame();
 }
 
 // ---------- inicio ----------
@@ -856,6 +901,7 @@ window.__game = {
   get camera() { return camera; },
   get quality() { return quality; },
   get dynRes() { return dynRes; },
+  get retroPipe() { return retroPipe; },
   menu,
 };
 
@@ -863,6 +909,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (quality.retro) applyRenderMode();
 });
 
 document.addEventListener('visibilitychange', () => {
