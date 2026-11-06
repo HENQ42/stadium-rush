@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stadium Rush · corrida estilo TrackMania</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="tags"></div>
+    <div id="hud"></div>
+
+    <div id="menu" class="menu">
+      <div class="menu-card">
+        <div class="logo">STADIUM <span>RUSH</span></div>
+        <div class="subtitle">Corrida estilo TrackMania Stadium · solo ou multiplayer na rede</div>
+
+        <section class="screen" data-screen="main">
+          <label class="field">
+            <span>Seu nickname</span>
+            <input id="nick" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Piloto" />
+          </label>
+          <div class="buttons">
+            <button id="btn-solo" class="primary">Corrida solo</button>
+            <button id="btn-create">Criar sala</button>
+            <button id="btn-join">Entrar em sala</button>
+          </div>
+          <label class="field inline">
+            <span>Pista do solo</span>
+            <select id="solo-track"></select>
+          </label>
+          <div id="best-start" class="best"></div>
+          <div class="keys">
+            <span>↑ acelerar</span><span>↓ freio / re</span><span>← → virar</span><span>Enter checkpoint</span><span>C camera</span><span>Esc menu</span>
+          </div>
+          <div class="tip">Dica: o carro tem muita tracao e faz curvas fechadas sem escorregar. Na terra e na grama ele escorrega.</div>
+        </section>
+
+        <section class="screen" data-screen="create">
+          <h2>Criar sala</h2>
+          <div class="grid2">
+            <label class="field">
+              <span>Voltas</span>
+              <select id="opt-laps"></select>
+            </label>
+            <label class="field">
+              <span>Colisao entre carros</span>
+              <select id="opt-collisions">
+                <option value="0">Nao (fantasmas)</option>
+                <option value="1">Sim</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Combustivel por checkpoint</span>
+              <select id="opt-fuel">
+                <option value="12">12 s (dificil)</option>
+                <option value="15">15 s</option>
+                <option value="20">20 s (normal)</option>
+                <option value="25">25 s</option>
+                <option value="30">30 s</option>
+                <option value="45">45 s (facil)</option>
+                <option value="0">Desligado</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Pista</span>
+              <select id="opt-track"></select>
+            </label>
+          </div>
+          <div class="note">
+            O tanque enche a cada checkpoint. Quem passar o tempo sem pegar o proximo checkpoint
+            e desclassificado e passa a assistir os outros.
+          </div>
+          <div class="buttons">
+            <button id="btn-create-go" class="primary">Criar sala</button>
+            <button data-back>Voltar</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="join">
+          <h2>Entrar em sala</h2>
+          <div class="join-row">
+            <input id="join-code" maxlength="8" autocomplete="off" spellcheck="false" placeholder="CODIGO" />
+            <button id="btn-join-go" class="primary">Entrar</button>
+          </div>
+          <div class="room-list-title">Salas na rede</div>
+          <div id="room-list" class="room-list"></div>
+          <div class="buttons">
+            <button data-back>Voltar</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="lobby">
+          <h2>Sala <span id="lobby-code" class="code"></span></h2>
+          <div id="lobby-link" class="lobby-link"></div>
+          <div id="lobby-settings" class="lobby-settings"></div>
+          <ul id="lobby-players" class="lobby-players"></ul>
+          <div id="lobby-wait" class="lobby-wait">Aguardando o master iniciar a corrida...</div>
+          <div class="buttons">
+            <button id="btn-start" class="primary">Iniciar corrida</button>
+            <button id="btn-leave">Sair da sala</button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="busy">
+          <div id="busy-text" class="busy-text">Conectando...</div>
+          <div class="buttons">
+            <button id="btn-busy-cancel">Cancelar</button>
+          </div>
+        </section>
+
+        <div id="menu-error" class="menu-error"></div>
+      </div>
+    </div>
+
+    <div id="results" class="results hidden">
+      <div class="results-card">
+        <h2 id="results-title">Resultado</h2>
+        <table class="results-table">
+          <thead>
+            <tr><th>#</th><th>Piloto</th><th>Tempo total</th><th>Diferenca</th><th>Melhor volta</th></tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+        <div id="results-note" class="results-note"></div>
+        <div class="buttons">
+          <button id="btn-again" class="primary">Nova corrida</button>
+          <button id="btn-results-hide">Esconder</button>
+          <button id="btn-results-leave">Sair da sala</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause" class="pause hidden">
+      <div class="pause-card">
+        <h2>Menu</h2>
+        <div class="buttons column">
+          <button id="btn-resume" class="primary">Continuar</button>
+          <button id="btn-show-results">Ver classificacao</button>
+          <button id="btn-end-race">Encerrar corrida (master)</button>
+          <button id="btn-quit">Sair para o menu</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
